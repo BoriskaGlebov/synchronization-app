@@ -32,18 +32,16 @@ def main():
                     logger.info(f'{info.path} - Произвел удаление')
                 elif (not remote_flag and
                       file_name in remote_files and
-                      (info.size != remote_files[file_name].size
-                       or
-                       info.modified.replace(second=0) > remote_files[file_name].modified.replace(second=0))
+                      (info.size != remote_files[file_name].size or
+                       info.modified > remote_files[file_name].modified)
                 ):
-                    print(info.modified.replace(second=0), remote_files[file_name].modified.replace(second=0))
                     yandex_conn.reload(file_name)
                     logger.info(f'{info.path} - Произошло обновление файла')
                 elif not remote_flag and file_name not in remote_files:
                     yandex_conn.load(file_name)
                     logger.info(f'{info.path} - Загрузил файл на диск')
 
-            time.sleep(int(configurator.timer))
+                time.sleep(int(configurator.timer))
         except (FileNotFoundError, ValueError, ConnectionError,) as ex:
             if type(ex).__name__ == 'FileNotFoundError':
                 logger.error(f'{ex.filename} - Такой папки нет , поменяйте название локальной папки')
