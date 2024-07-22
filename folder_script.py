@@ -1,9 +1,9 @@
-from dataclasses import dataclass
 import datetime
 import os
 import time
+from dataclasses import dataclass
 from pprint import pprint
-from typing import Any
+
 from config import configurator
 
 
@@ -15,9 +15,16 @@ class Answer:
     modified: datetime.datetime | None | str = None
 
     def __post_init__(self):
+        """
+        Преобразование времени к нужному формату,
+        на ЯД были проблемы с тем что на сервере время в формате UTC,
+         а локальное время другое
+        """
         if isinstance(self.modified, str):
-            self.modified = datetime.datetime.strptime(self.modified,
-                                                       '%Y-%m-%dT%H:%M:%S%z').replace(tzinfo=None)
+            self.modified = (datetime.datetime.strptime(self.modified, '%Y-%m-%dT%H:%M:%S%z') -
+                             datetime.timedelta(seconds=time.timezone)).replace(tzinfo=None)
+        else:
+            self.modified = self.modified.replace(microsecond=0)
 
 
 class FolderScan:
@@ -40,4 +47,4 @@ class FolderScan:
 
 scaner = FolderScan(configurator.local_folder)
 if __name__ == '__main__':
-    pprint(scaner.list_file()['tets.txt'])
+    pprint(scaner.list_file())

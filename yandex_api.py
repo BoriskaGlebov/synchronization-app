@@ -1,15 +1,17 @@
-import datetime
+import os
+from pprint import pprint
 
 import requests
-from pprint import pprint
-from folder_script import Answer
+
 from config import configurator
+from folder_script import Answer
 
 
 class YandexApi:
     """
     Класс работы с APi Яндекс диска
     """
+
     def __init__(self, token):
         self.token = token
         self.header = {'Accept': 'application/json',
@@ -35,7 +37,7 @@ class YandexApi:
         :return: список файлов с их данными
         """
         http = 'https://cloud-api.yandex.net/v1/disk/resources'
-        data = {'path': '/test/',
+        data = {'path': configurator.remote_folder,
                 'fields': '_embedded.items.name, '
                           '_embedded.items.path, '
                           '_embedded.items.size, '
@@ -49,6 +51,8 @@ class YandexApi:
             return res
         elif response.status_code == 401:
             raise ValueError("Ошибка в токене")
+        elif response.status_code == 404:
+            raise ValueError("Ошибка пути синхронизации, поменяйте путь к папке диска")
         return response.status_code
 
     def load(self, path) -> int | str:
@@ -58,16 +62,16 @@ class YandexApi:
         :return: статус код или код ошибки
         """
         http = 'https://cloud-api.yandex.net/v1/disk/resources/upload'
-        params = {'path': configurator.remote_folder + path,
+        params = {'path': os.path.join(configurator.remote_folder, path),
                   'overwrite': False}
         response = requests.get(url=http, headers=self.header, params=params)
 
         if response.status_code == 200:
             href = response.json()['href']
-            with open(configurator.local_folder + path, 'rb') as file:
+            with open(os.path.join(configurator.local_folder, path), 'rb') as file:
                 res = requests.put(url=href, files={'file': file})
-                if (status_code := res.status_code) == 201:
-                    return status_code
+        if (status_code := res.status_code) == 201:
+            return status_code
         else:
             return response.json()['message']
 
@@ -79,13 +83,13 @@ class YandexApi:
         :return: статус код или сообщение об ошибке
         """
         http = 'https://cloud-api.yandex.net/v1/disk/resources/upload'
-        params = {'path': configurator.remote_folder + path,
+        params = {'path': os.path.join(configurator.remote_folder, path),
                   'overwrite': True}
         response = requests.get(url=http, headers=self.header, params=params)
 
         if response.status_code == 200:
             href = response.json()['href']
-            with open(configurator.local_folder + path, 'rb') as file:
+            with open(os.path.join(configurator.local_folder, path), 'rb') as file:
                 res = requests.put(url=href, files={'file': file})
                 if (status_code := res.status_code) == 201:
                     return status_code
@@ -99,10 +103,8 @@ class YandexApi:
         :return: статус код или ничего
         """
         http = 'https://cloud-api.yandex.net/v1/disk/resources'
-        params = {'path': configurator.remote_folder + filename}
+        params = {'path': os.path.join(configurator.remote_folder, filename)}
         response = requests.delete(url=http, headers=self.header, params=params)
-        # print(params)
-        # print(response.url)
         if response.status_code == 204:
             return None
         else:
@@ -111,8 +113,8 @@ class YandexApi:
 
 yandex_conn = YandexApi(configurator.token)
 if __name__ == '__main__':
-    pprint(yandex_conn.get_info_disc())
+    # pprint(yandex_conn.get_info_disc())
     pprint(yandex_conn.get_dick_resources())
-    # pprint(yandex_conn.load('ex.txt'))
-    # pprint(yandex_conn.reload('ex.txt'))
+    # pprint(yandex_conn.load('Новый текстовый документ.txt'))
+    # pprint(yandex_conn.reload('Новый текстовый документ.txt'))
     # pprint(yandex_conn.delete('ex1.txt'))

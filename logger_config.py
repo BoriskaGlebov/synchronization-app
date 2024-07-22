@@ -1,15 +1,15 @@
-
 # Словарь настройки логирования проекта
 import logging
-import os
+import os.path
 from logging import config
-from logging import FileHandler
-from logging.handlers import TimedRotatingFileHandler
-import sys
-import string
 
-default_path = os.path.dirname(os.path.abspath(__file__)).split('synchronization-app')[0] + 'synchronization-app/'
+from config import configurator
 
+# default_path = os.path.dirname(os.path.abspath(__file__)).split('synchronization-app')[0] + 'synchronization-app/'
+default_path = os.path.abspath(configurator.log_path)
+if not os.path.exists(default_path):
+    raise FileNotFoundError("Нет такой папки для логера, поменяйте название")
+# print(os.path.join(default_path, 'logger.log'))
 
 def any_exeption(type, values, traceback_info):
     """
@@ -44,7 +44,7 @@ dict_config = {
             "class": "logging.FileHandler",
             "level": "DEBUG",
             "formatter": "base",
-            "filename": f'{default_path}logger.log',
+            "filename": os.path.join(default_path, 'logger.log'),
             "mode": "a",
             "encoding": "utf-8",
         },
@@ -55,8 +55,6 @@ dict_config = {
             "level": "INFO",
             "handlers": ["file", "console"],
         },
-
-
 
     },
     # "filters": {
