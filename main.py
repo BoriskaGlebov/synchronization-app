@@ -1,11 +1,13 @@
+import logging
 import sys
 import time
 from logging.config import dictConfig
 
 from requests.exceptions import ConnectionError
 
+from config import configurator
 from folder_script import scaner
-from logger_config import *
+from logger_config import dict_config, any_exeption
 from yandex_api import yandex_conn
 
 logger = logging.getLogger('main')
@@ -41,8 +43,8 @@ def main():
                     yandex_conn.load(file_name)
                     logger.info(f'{info.path} - Загрузил файл на диск')
 
-                time.sleep(int(configurator.timer))
-        except (FileNotFoundError, ValueError, ConnectionError,) as ex:
+                time.sleep(configurator.timer)
+        except (FileNotFoundError, ValueError, ConnectionError, TypeError) as ex:
             if type(ex).__name__ == 'FileNotFoundError':
                 logger.error(f'{ex.filename} - Такой папки нет , поменяйте название локальной папки')
             elif type(ex).__name__ == 'ValueError':
