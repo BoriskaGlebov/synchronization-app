@@ -40,6 +40,7 @@ async def _run(settings: Settings, command: str, once: bool, dry_run: bool) -> N
             disk=disk,
             storage=LocalStorage(settings.sync.local_folder),
             mapper=FolderMapper(settings.sync.mappings),
+            report_path=settings.logging.dir / "report.txt",
             interval_seconds=settings.sync.interval_seconds,
             concurrency=settings.sync.concurrency,
         )

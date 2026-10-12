@@ -28,10 +28,13 @@ class FakeDisk:
 
 
 def make_service(
-    disk: FakeDisk, root: Path, mappings: list[FolderMapping] | None = None
+    disk: FakeDisk,
+    root: Path,
+    mappings: list[FolderMapping] | None = None,
+    report_path: Path | None = None,
 ) -> MirrorService:
     mapper = FolderMapper(mappings or [FolderMapping(remote="/")])
-    return MirrorService(disk, LocalStorage(root), mapper, 1, 2)  # type: ignore[arg-type]
+    return MirrorService(disk, LocalStorage(root), mapper, 1, 2, report_path)  # type: ignore[arg-type]
 
 
 def test_downloads_into_nested_folders_and_keeps_mtime(tmp_path: Path) -> None:
@@ -110,3 +113,24 @@ def test_mapping_puts_remote_folder_into_local_subfolder(tmp_path: Path) -> None
     assert (tmp_path / "Фото/Камера/2022/a.jpg").read_bytes() == b"1"
     assert not (tmp_path / "Документы").exists()
     assert result.planned == 1
+
+
+def test_report_lists_plan_present_problems_and_unmapped(tmp_path: Path) -> None:
+    root = tmp_path / "dest"
+    root.mkdir()
+    (root / "ok.jpg").write_bytes(b"1")
+    disk = FakeDisk({"/Фото/new.jpg": b"22", "/Фото/bad:name.jpg": b"3", "/Другое/x.pdf": b"4"})
+    mappings = [FolderMapping(remote="/Фото", local="")]
+    report = tmp_path / "report.txt"
+
+    asyncio.run(make_service(disk, root, mappings, report).run_once(dry_run=True))
+
+    text = report.read_text(encoding="utf-8")
+    assert "# К скачиванию (2)" in text and "new.jpg  <-  /Фото/new.jpg" in text
+    assert "# Проблемные имена (1)" in text and "bad:name.jpg" in text
+    assert "# Не покрыто соответствиями (1)" in text and "/Другое/x.pdf" in text
+    assert (
+        "# Есть локально в папках соответствий, но нет на Диске (не удаляются) (1)" in text
+        and "ok.jpg" in text
+    )
+    assert not list(root.rglob("new.jpg"))

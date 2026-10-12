@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import os
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -10,7 +11,9 @@ from yadisk.exceptions import RequestError, UnauthorizedError, YaDiskError
 from sync_app.clients.yandex import YandexDisk
 from sync_app.core.exceptions import SyncError
 from sync_app.core.formatting import human_size
-from sync_app.services.mapper import FolderMapper
+from sync_app.models import FileInfo
+from sync_app.services.checks import find_problems
+from sync_app.services.mapper import FolderMapper, MappedFiles
 from sync_app.services.planner import Download, plan_downloads
 from sync_app.storage.local import PART_SUFFIX, LocalStorage
 
@@ -43,6 +46,7 @@ class MirrorService:
         mapper: Соответствие папок Диска и папок назначения.
         interval_seconds: Пауза между проходами в режиме демона.
         concurrency: Максимум одновременных скачиваний.
+        report_path: Куда писать подробный отчёт о плане, `None` если не нужен.
     """
 
     def __init__(
@@ -52,10 +56,12 @@ class MirrorService:
         mapper: FolderMapper,
         interval_seconds: int,
         concurrency: int,
+        report_path: Path | None = None,
     ) -> None:
         self.disk = disk
         self.storage = storage
         self.mapper = mapper
+        self.report_path = report_path
         self.interval_seconds = interval_seconds
         self._semaphore = asyncio.Semaphore(concurrency)
         self._sources: dict[str, str] = {}
@@ -92,13 +98,69 @@ class MirrorService:
             human_size(planned_bytes),
             len(remote) - len(plan),
         )
+        problems = {
+            item.path: found
+            for item in plan
+            if (found := find_problems(item.path, item.remote.size))
+        }
+        self._log_findings(mapped, problems)
+        if self.report_path is not None:
+            await asyncio.to_thread(self._write_report, plan, remote, local, mapped, problems)
         if dry_run:
-            for item in plan:
-                logger.debug("[dry-run] {} ({} байт)", item.path, item.remote.size)
             return MirrorResult(len(plan), planned_bytes, 0, 0)
         results = await asyncio.gather(*(self._download(item) for item in plan))
         downloaded = sum(results)
         return MirrorResult(len(plan), planned_bytes, downloaded, len(plan) - downloaded)
+
+    def _log_findings(self, mapped: MappedFiles, problems: dict[str, list[str]]) -> None:
+        folders = Counter(PurePosixPath(path).parts[1] for path in mapped.unmapped)
+        if folders:
+            top = ", ".join(f"{name} ({count})" for name, count in folders.most_common(8))
+            logger.warning(
+                "Не покрыто соответствиями: {} файлов, папки: {}", len(mapped.unmapped), top
+            )
+        for skipped, kept in mapped.collisions:
+            logger.warning("Конфликт путей: {} пропущен, занято {}", skipped, kept)
+        for path, found in list(problems.items())[:20]:
+            logger.warning("Проблемный файл {}: {}", path, "; ".join(found))
+        if len(problems) > 20:
+            logger.warning("Проблемных файлов всего {}, остальные в отчёте", len(problems))
+        if self.report_path is not None:
+            logger.info("Подробный отчёт: {}", self.report_path)
+
+    def _write_report(
+        self,
+        plan: list[Download],
+        remote: dict[str, FileInfo],
+        local: dict[str, FileInfo],
+        mapped: MappedFiles,
+        problems: dict[str, list[str]],
+    ) -> None:
+        assert self.report_path is not None
+        self.report_path.parent.mkdir(parents=True, exist_ok=True)
+        planned = {item.path for item in plan}
+        lines = [f"# К скачиванию ({len(plan)})"]
+        lines += [
+            f"{human_size(i.remote.size):>10}  {i.path}  <-  {mapped.sources[i.path]}" for i in plan
+        ]
+        present = sorted(set(remote) - planned)
+        lines += ["", f"# Уже на месте ({len(present)})", *present]
+        lines += ["", f"# Проблемные имена ({len(problems)})"]
+        lines += [f"{path}: {'; '.join(found)}" for path, found in problems.items()]
+        lines += ["", f"# Не покрыто соответствиями ({len(mapped.unmapped)})", *mapped.unmapped]
+        lines += ["", f"# Конфликты путей ({len(mapped.collisions)})"]
+        lines += [f"{skipped} пропущен, занято {kept}" for skipped, kept in mapped.collisions]
+        extra = sorted(
+            path
+            for path in set(local) - set(remote)
+            if any(path.startswith(prefix) for prefix in self.mapper.local_prefixes())
+        )
+        lines += [
+            "",
+            f"# Есть локально в папках соответствий, но нет на Диске (не удаляются) ({len(extra)})",
+            *extra,
+        ]
+        self.report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     async def run_forever(self) -> None:
         """Запускает проходы, пока не возникнет неустранимая ошибка."""
