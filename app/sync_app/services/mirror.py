@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,5 +112,6 @@ class MirrorService:
         if size != item.remote.size:
             raise ValueError(f"размер {size} вместо {item.remote.size}")
         timestamp = item.remote.modified.timestamp()
-        os.utime(part, (timestamp, timestamp))
+        with contextlib.suppress(OSError):
+            os.utime(part, (timestamp, timestamp))
         os.replace(part, target)

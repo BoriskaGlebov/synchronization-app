@@ -83,3 +83,16 @@ def test_missing_local_folder_stops_before_anything(tmp_path: Path) -> None:
 
     with pytest.raises(LocalFolderNotFoundError):
         asyncio.run(service.run_once())
+
+
+def test_unsupported_utime_does_not_fail_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def deny(*args: object, **kwargs: object) -> None:
+        raise PermissionError("utime не поддерживается")
+
+    monkeypatch.setattr("sync_app.services.mirror.os.utime", deny)
+
+    result = asyncio.run(make_service(FakeDisk({"a.jpg": b"abc"}), tmp_path).run_once())
+
+    assert result.downloaded == 1 and (tmp_path / "a.jpg").read_bytes() == b"abc"
