@@ -39,7 +39,7 @@ async def _run(settings: Settings, command: str, once: bool, dry_run: bool) -> N
         service = MirrorService(
             disk=disk,
             storage=LocalStorage(settings.sync.local_folder),
-            mapper=FolderMapper(settings.sync.mappings),
+            mapper=FolderMapper(settings.sync.mappings, settings.sync.sanitize_names),
             report_path=settings.logging.dir / "report.txt",
             attempts=settings.sync.attempts,
             interval_seconds=settings.sync.interval_seconds,

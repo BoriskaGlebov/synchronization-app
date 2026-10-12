@@ -27,3 +27,24 @@ def find_problems(path: str, size: int) -> list[str]:
         if len(part.encode()) > MAX_NAME_BYTES:
             problems.append(f"имя длиннее {MAX_NAME_BYTES} байт: «{part[:40]}…»")
     return problems
+
+
+def safe_name(name: str) -> str:
+    """Делает имя файла или папки допустимым для сетевых дисков (SMB, Windows).
+
+    Недопустимые символы заменяются: `:` на `-`, остальные на `_`, табы и повторные
+    пробелы схлопываются, пробелы и точки по краям убираются, длинное имя обрезается
+    до 255 байт с сохранением расширения.
+
+    Args:
+        name: Имя одного элемента пути.
+
+    Returns:
+        Безопасное имя, не пустое.
+    """
+    cleaned = re.sub(r"\s+", " ", name.replace(":", "-"))
+    cleaned = FORBIDDEN_CHARS.sub("_", cleaned).strip(" .") or "_"
+    while len(cleaned.encode()) > MAX_NAME_BYTES:
+        stem, dot, extension = cleaned.rpartition(".")
+        cleaned = stem[:-1] + dot + extension if dot and len(extension) < 10 else cleaned[:-1]
+    return cleaned

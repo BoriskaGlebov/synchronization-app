@@ -5,6 +5,7 @@ from loguru import logger
 
 from sync_app.core.settings import FolderMapping
 from sync_app.models import FileInfo
+from sync_app.services.checks import safe_name
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,11 +16,13 @@ class MappedFiles:
         files: Описания файлов по пути назначения относительно корневой папки.
         sources: Полный путь на Яндекс Диске по пути назначения.
         collisions: Пары (пропущенный файл, занявший место файл) при совпадении путей.
+        renamed: Пары (путь на Диске, путь назначения) для файлов с изменённым именем.
     """
 
     files: dict[str, FileInfo]
     sources: dict[str, str]
     collisions: list[tuple[str, str]]
+    renamed: list[tuple[str, str]]
 
 
 class FolderMapper:
@@ -30,12 +33,14 @@ class FolderMapper:
 
     Args:
         mappings: Список соответствий папок.
+        sanitize: Заменять недопустимые для сетевых дисков символы в именах с Диска.
 
     Raises:
         ValueError: В пути соответствия есть `..`.
     """
 
-    def __init__(self, mappings: list[FolderMapping]) -> None:
+    def __init__(self, mappings: list[FolderMapping], sanitize: bool = True) -> None:
+        self._sanitize = sanitize
         self._rules = sorted(
             ((self._normalize(m.remote), self._normalize(m.local)) for m in mappings),
             key=lambda rule: len(rule[0]),
@@ -58,15 +63,28 @@ class FolderMapper:
         """Возвращает папки Диска из соответствий, которые нужно просматривать."""
         return ["/" + remote for remote, _ in self._rules]
 
-    def target_of(self, remote_path: str) -> str | None:
-        """Возвращает путь назначения для файла Диска или `None`, если он не сопоставлен."""
+    def target_of(self, remote_path: str, sanitize: bool | None = None) -> str | None:
+        """Возвращает путь назначения для файла Диска или `None`, если он не сопоставлен.
+
+        Args:
+            remote_path: Полный путь файла на Диске.
+            sanitize: Заменять ли недопустимые символы; по умолчанию как задано в объекте.
+        """
+        clean = self._sanitize if sanitize is None else sanitize
         relative = remote_path.strip("/")
         for remote, local in self._rules:
             if not remote:
-                return f"{local}/{relative}".strip("/")
+                return f"{local}/{self._clean(relative, clean)}".strip("/")
             if relative.startswith(remote + "/"):
-                return f"{local}/{relative.removeprefix(remote + '/')}".strip("/")
+                rest = self._clean(relative.removeprefix(remote + "/"), clean)
+                return f"{local}/{rest}".strip("/")
         return None
+
+    @staticmethod
+    def _clean(relative: str, sanitize: bool) -> str:
+        if not sanitize:
+            return relative
+        return "/".join(safe_name(part) for part in relative.split("/"))
 
     def map_files(self, remote: dict[str, FileInfo]) -> MappedFiles:
         """Раскладывает файлы Диска по путям назначения.
@@ -81,6 +99,7 @@ class FolderMapper:
         files: dict[str, FileInfo] = {}
         sources: dict[str, str] = {}
         collisions: list[tuple[str, str]] = []
+        renamed: list[tuple[str, str]] = []
         for remote_path, info in sorted(remote.items()):
             target = self.target_of(remote_path)
             if target is None:
@@ -91,6 +110,8 @@ class FolderMapper:
                     "{} пропущен: путь {} уже занят {}", remote_path, target, sources[target]
                 )
                 continue
+            if target != self.target_of(remote_path, sanitize=False):
+                renamed.append((remote_path, target))
             files[target] = FileInfo(target, info.size, info.modified)
             sources[target] = remote_path
-        return MappedFiles(files, sources, collisions)
+        return MappedFiles(files, sources, collisions, renamed)

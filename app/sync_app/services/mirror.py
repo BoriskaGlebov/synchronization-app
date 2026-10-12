@@ -126,6 +126,11 @@ class MirrorService:
         return result
 
     def _log_findings(self, mapped: MappedFiles, problems: dict[str, list[str]]) -> None:
+        if mapped.renamed:
+            logger.warning(
+                "Переименовано из-за недопустимых символов: {} файлов (список в отчёте)",
+                len(mapped.renamed),
+            )
         for skipped, kept in mapped.collisions:
             logger.warning("Конфликт путей: {} пропущен, занято {}", skipped, kept)
         for path, found in list(problems.items())[:20]:
@@ -154,6 +159,8 @@ class MirrorService:
         lines += ["", f"# Уже на месте ({len(present)})", *present]
         lines += ["", f"# Проблемные имена ({len(problems)})"]
         lines += [f"{path}: {'; '.join(found)}" for path, found in problems.items()]
+        lines += ["", f"# Переименовано из-за недопустимых символов ({len(mapped.renamed)})"]
+        lines += [f"{remote}  ->  {target}" for remote, target in mapped.renamed]
         lines += ["", f"# Конфликты путей ({len(mapped.collisions)})"]
         lines += [f"{skipped} пропущен, занято {kept}" for skipped, kept in mapped.collisions]
         extra = sorted(set(local) - set(remote))

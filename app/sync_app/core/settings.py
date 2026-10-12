@@ -36,6 +36,7 @@ class SyncSettings(BaseModel):
         interval_seconds: Пауза между циклами синхронизации.
         concurrency: Максимум одновременных скачиваний.
         attempts: Сколько раз пробовать скачать файл при ошибке.
+        sanitize_names: Заменять недопустимые для сетевых дисков символы в именах.
     """
 
     local_folder: Path
@@ -43,6 +44,7 @@ class SyncSettings(BaseModel):
     interval_seconds: int = Field(default=60, gt=0)
     concurrency: int = Field(default=5, gt=0)
     attempts: int = Field(default=1, ge=1)
+    sanitize_names: bool = True
 
 
 class AuthSettings(BaseModel):

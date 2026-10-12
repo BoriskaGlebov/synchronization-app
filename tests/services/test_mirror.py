@@ -137,7 +137,9 @@ def test_report_lists_plan_present_and_problems(tmp_path: Path) -> None:
 
     text = report.read_text(encoding="utf-8")
     assert "# К скачиванию (2)" in text and "new.jpg  <-  /Фото/new.jpg" in text
-    assert "# Проблемные имена (1)" in text and "bad:name.jpg" in text
+    assert "# Проблемные имена (0)" in text
+    assert "# Переименовано из-за недопустимых символов (1)" in text
+    assert "/Фото/bad:name.jpg  ->  bad-name.jpg" in text
     assert (
         "# Есть локально в папках соответствий, но нет на Диске (не удаляются) (1)" in text
         and "ok.jpg" in text

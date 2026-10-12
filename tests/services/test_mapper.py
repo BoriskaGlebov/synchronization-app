@@ -61,3 +61,19 @@ def test_local_folders_and_remote_folders() -> None:
     assert sorted(m.remote_folders()) == ["/Книги", "/Фото"]
     assert sorted(m.local_folders()) == ["Архив/Фото", "Книги"]
     assert mapper(("/", "")).local_folders() == [""]
+
+
+def test_mapper_sanitizes_names_and_reports_renames() -> None:
+    m = mapper(("/", ""))
+    remote = {"/04.05\tTeika 11:00/a.jpg": FileInfo("/x", 1, NOW)}
+
+    mapped = m.map_files(remote)
+
+    assert list(mapped.files) == ["04.05 Teika 11-00/a.jpg"]
+    assert mapped.renamed == [("/04.05\tTeika 11:00/a.jpg", "04.05 Teika 11-00/a.jpg")]
+
+
+def test_sanitizing_can_be_disabled() -> None:
+    m = FolderMapper([FolderMapping(remote="/")], sanitize=False)
+
+    assert m.target_of("/a:b/c.jpg") == "a:b/c.jpg"
