@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from sync_app.core.exceptions import LocalFolderNotFoundError
 from sync_app.storage.local import LocalStorage
 

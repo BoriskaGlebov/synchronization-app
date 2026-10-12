@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from loguru import logger
-
 from sync_app.core.logger_config import LoggerConfig
 
 

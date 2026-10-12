@@ -172,3 +172,4 @@ cython_debug/
 # logs and local secrets
 logs/
 .env
+secrets/

@@ -3,16 +3,17 @@ name = "synchronization-app"
 version = "0.1.0"
 description = "Синхронизация папок Яндекс Диска с локальным и сетевым диском"
 authors = ["Boris"]
-packages = [{ include = "sync_app", from = "src" }]
+packages = [{ include = "sync_app", from = "app" }]
 
 [tool.poetry.scripts]
 sync-app = "sync_app.cli:main"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-requests = "^2.34.2"
 pydantic-settings = "^2.15.0"
 loguru = "^0.7.3"
+yadisk = "^3.4.1"
+httpx = "^0.28.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.17.0"
@@ -41,7 +42,7 @@ convention = "google"
 "tests/**" = ["D"]
 
 [tool.mypy]
-mypy_path = "src"
+mypy_path = "app"
 plugins = ["pydantic.mypy"]
 python_version = "3.11"
 ignore_missing_imports = true
@@ -49,5 +50,5 @@ check_untyped_defs = true
 warn_unused_ignores = true
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["app"]
 testpaths = ["tests"]

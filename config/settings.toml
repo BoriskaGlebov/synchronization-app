@@ -1,7 +1,12 @@
+[auth]
+redirect_uri = ""
+token_file = "secrets/token.json"
+
 [sync]
 remote_folder = "/Фото"
 local_folder = "/mnt/nas/photos"
 interval_seconds = 60
+concurrency = 5
 
 [logging]
 dir = "logs"

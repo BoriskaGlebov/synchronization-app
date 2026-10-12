@@ -7,7 +7,7 @@
 ```
 config/settings.toml      несекретные настройки
 .env                      секреты (SYNC_YANDEX_TOKEN), не коммитится
-src/sync_app/
+app/sync_app/
   cli.py                  точка входа
   core/                   настройки, логирование, исключения
   clients/yandex.py       клиент API Яндекс Диска

@@ -2,13 +2,9 @@ class SyncError(Exception):
     """Базовое исключение приложения."""
 
 
-class YandexAuthError(SyncError):
-    """Яндекс Диск отклонил токен."""
-
-
-class RemoteFolderNotFoundError(SyncError):
-    """Папка на Яндекс Диске не найдена."""
-
-
 class LocalFolderNotFoundError(SyncError):
     """Локальная папка синхронизации не найдена."""
+
+
+class AuthRequiredError(SyncError):
+    """Нет действующего токена, нужно выполнить `sync-app auth`."""

@@ -25,6 +25,19 @@ class SyncSettings(BaseModel):
     remote_folder: str = "/"
     local_folder: Path
     interval_seconds: int = Field(default=60, gt=0)
+    concurrency: int = Field(default=5, gt=0)
+
+
+class AuthSettings(BaseModel):
+    """Параметры OAuth (несекретные).
+
+    Attributes:
+        redirect_uri: Redirect URI из настроек приложения на oauth.yandex.ru.
+        token_file: Файл, где хранятся полученные токены.
+    """
+
+    redirect_uri: str | None = None
+    token_file: Path = Path("secrets/token.json")
 
 
 class LoggingSettings(BaseModel):
@@ -50,8 +63,10 @@ class Settings(BaseSettings):
     по умолчанию `config/settings.toml`), секреты только из окружения или `.env`.
 
     Attributes:
-        yandex_token: OAuth-токен Яндекс Диска.
+        yandex_client_id: ClientID приложения Яндекс OAuth.
+        yandex_client_secret: Client secret приложения Яндекс OAuth.
         sync: Параметры синхронизации.
+        auth: Параметры OAuth.
         logging: Параметры логирования.
     """
 
@@ -59,8 +74,10 @@ class Settings(BaseSettings):
         env_prefix="SYNC_", env_nested_delimiter="__", env_file=".env", extra="ignore"
     )
 
-    yandex_token: SecretStr
+    yandex_client_id: str
+    yandex_client_secret: SecretStr
     sync: SyncSettings
+    auth: AuthSettings = AuthSettings()
     logging: LoggingSettings = LoggingSettings()
 
     @classmethod
