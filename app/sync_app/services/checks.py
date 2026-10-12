@@ -1,3 +1,4 @@
+import hashlib
 import re
 from pathlib import PurePosixPath
 
@@ -34,7 +35,7 @@ def safe_name(name: str) -> str:
 
     Недопустимые символы заменяются: `:` на `-`, остальные на `_`, табы и повторные
     пробелы схлопываются, пробелы и точки по краям убираются, длинное имя обрезается
-    до 255 байт с сохранением расширения.
+    до 255 байт с сохранением расширения и коротким хэшем, чтобы разные имена не совпали.
 
     Args:
         name: Имя одного элемента пути.
@@ -44,7 +45,13 @@ def safe_name(name: str) -> str:
     """
     cleaned = re.sub(r"\s+", " ", name.replace(":", "-"))
     cleaned = FORBIDDEN_CHARS.sub("_", cleaned).strip(" .") or "_"
-    while len(cleaned.encode()) > MAX_NAME_BYTES:
+    if len(cleaned.encode()) > MAX_NAME_BYTES:
+        suffix = "~" + hashlib.md5(cleaned.encode(), usedforsecurity=False).hexdigest()[:6]
         stem, dot, extension = cleaned.rpartition(".")
-        cleaned = stem[:-1] + dot + extension if dot and len(extension) < 10 else cleaned[:-1]
+        if not dot or len(extension) >= 10:
+            stem, dot, extension = cleaned, "", ""
+        tail = suffix + dot + extension
+        while len((stem + tail).encode()) > MAX_NAME_BYTES:
+            stem = stem[:-1]
+        cleaned = stem + tail
     return cleaned

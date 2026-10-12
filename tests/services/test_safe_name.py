@@ -24,3 +24,10 @@ def test_long_name_is_cut_but_extension_is_kept() -> None:
 
     assert result.endswith(".jpg") and len(result.encode()) <= 255
     assert find_problems(result, 1) == []
+
+
+def test_different_long_names_stay_different() -> None:
+    a = safe_name("я" * 300 + "a.docx")
+    b = safe_name("я" * 300 + "b.docx")
+
+    assert a != b and len(a.encode()) <= 255 and a.endswith(".docx")
