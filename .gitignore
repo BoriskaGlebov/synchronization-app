@@ -168,3 +168,6 @@ cython_debug/
 /.idea/synchronization-app.iml
 /.idea/vcs.xml
 /config_template.ini
+
+# local config with secrets
+/config.ini
