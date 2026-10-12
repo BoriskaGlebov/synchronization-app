@@ -35,12 +35,14 @@ class SyncSettings(BaseModel):
         mappings: Какие папки Диска в какие подпапки назначения копировать.
         interval_seconds: Пауза между циклами синхронизации.
         concurrency: Максимум одновременных скачиваний.
+        attempts: Сколько раз пробовать скачать файл при ошибке.
     """
 
     local_folder: Path
     mappings: list[FolderMapping] = Field(default_factory=lambda: [FolderMapping(remote="/")])
     interval_seconds: int = Field(default=60, gt=0)
     concurrency: int = Field(default=5, gt=0)
+    attempts: int = Field(default=1, ge=1)
 
 
 class AuthSettings(BaseModel):
