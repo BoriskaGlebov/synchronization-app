@@ -21,7 +21,9 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help=run_help, description=run_help)
     run.add_argument("--once", action="store_true", help="выполнить один цикл и выйти")
     run.add_argument(
-        "--dry-run", action="store_true", help="показать, что будет скачано, ничего не записывая"
+        "--dry-run",
+        action="store_true",
+        help="показать статистику (файлы, папки, размер), ничего не скачивая",
     )
     return parser
 

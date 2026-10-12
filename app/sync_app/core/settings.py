@@ -109,7 +109,3 @@ class Settings(BaseSettings):
             dotenv_settings,
             TomlConfigSettingsSource(settings_cls, toml_file=config_path),
         )
-
-
-if __name__ == "__main__":
-    print(DEFAULT_CONFIG_PATH.absolute())

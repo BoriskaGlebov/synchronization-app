@@ -11,6 +11,8 @@ from sync_app.core.exceptions import AuthRequiredError
 from sync_app.core.settings import Settings
 from sync_app.models import FileInfo
 
+PAGE_SIZE = 1000
+
 
 class TokenStore:
     """Хранит токены OAuth в файле с правами только для владельца.
@@ -121,20 +123,19 @@ class YandexDisk:
     async def walk_files(self) -> dict[str, FileInfo]:
         """Возвращает все файлы папки, включая вложенные.
 
+        Использует плоский постраничный список всех файлов диска, это на порядок быстрее
+        рекурсивного обхода папок.
+
         Returns:
             Словарь, где ключ это путь относительно папки с разделителем `/`.
         """
         prefix = f"disk:{self.remote_folder.rstrip('/')}/"
         files: dict[str, FileInfo] = {}
-        pending = [self.remote_folder]
-        while pending:
-            async for item in self.client.listdir(pending.pop()):
-                if item.type == "dir" and item.path:
-                    pending.append(item.path.removeprefix("disk:"))
-                elif item.type == "file" and item.path and item.modified:
-                    relative = item.path.removeprefix(prefix)
-                    modified = item.modified.astimezone(UTC).replace(microsecond=0)
-                    files[relative] = FileInfo(relative, item.size or 0, modified)
+        async for item in self.client.get_files(limit=PAGE_SIZE):
+            if item.path and item.path.startswith(prefix) and item.modified:
+                relative = item.path.removeprefix(prefix)
+                modified = item.modified.astimezone(UTC).replace(microsecond=0)
+                files[relative] = FileInfo(relative, item.size or 0, modified)
         return files
 
     async def download(self, relative_path: str, destination: Path) -> None:

@@ -48,7 +48,7 @@ def test_dry_run_writes_nothing(tmp_path: Path) -> None:
 
     result = asyncio.run(make_service(disk, tmp_path).run_once(dry_run=True))
 
-    assert result.planned == 1 and result.downloaded == 0
+    assert (result.planned, result.planned_bytes, result.downloaded) == (1, 3, 0)
     assert list(tmp_path.iterdir()) == []
 
 

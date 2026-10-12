@@ -2,13 +2,14 @@ import asyncio
 import contextlib
 import os
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from loguru import logger
 from yadisk.exceptions import PathNotFoundError, RequestError, UnauthorizedError, YaDiskError
 
 from sync_app.clients.yandex import YandexDisk
 from sync_app.core.exceptions import SyncError
+from sync_app.core.formatting import human_size
 from sync_app.services.planner import Download, plan_downloads
 from sync_app.storage.local import PART_SUFFIX, LocalStorage
 
@@ -19,11 +20,13 @@ class MirrorResult:
 
     Attributes:
         planned: Сколько файлов нужно скачать.
+        planned_bytes: Суммарный размер файлов к скачиванию.
         downloaded: Сколько скачано успешно.
         failed: Сколько скачать не удалось.
     """
 
     planned: int
+    planned_bytes: int
     downloaded: int
     failed: int
 
@@ -52,7 +55,7 @@ class MirrorService:
         """Выполняет один проход.
 
         Args:
-            dry_run: Только показать, что будет скачано, ничего не записывая.
+            dry_run: Только показать статистику и план, ничего не записывая.
 
         Raises:
             LocalFolderNotFoundError: Локальной папки нет (например, диск не смонтирован).
@@ -60,14 +63,27 @@ class MirrorService:
         local = await asyncio.to_thread(self.storage.list_files)
         remote = await self.disk.walk_files()
         plan = plan_downloads(remote, local)
-        logger.info("На диске файлов: {}, к скачиванию: {}", len(remote), len(plan))
+        planned_bytes = sum(item.remote.size for item in plan)
+        logger.info(
+            "На Яндекс Диске: {} файлов в {} папках, {}",
+            len(remote),
+            len({PurePosixPath(path).parent for path in remote}),
+            human_size(sum(info.size for info in remote.values())),
+        )
+        logger.info(
+            "К скачиванию: {} файлов в {} папках, {}; уже на месте: {}",
+            len(plan),
+            len({PurePosixPath(item.path).parent for item in plan}),
+            human_size(planned_bytes),
+            len(remote) - len(plan),
+        )
         if dry_run:
             for item in plan:
-                logger.info("[dry-run] {} ({} байт)", item.path, item.remote.size)
-            return MirrorResult(len(plan), 0, 0)
+                logger.debug("[dry-run] {} ({} байт)", item.path, item.remote.size)
+            return MirrorResult(len(plan), planned_bytes, 0, 0)
         results = await asyncio.gather(*(self._download(item) for item in plan))
         downloaded = sum(results)
-        return MirrorResult(len(plan), downloaded, len(plan) - downloaded)
+        return MirrorResult(len(plan), planned_bytes, downloaded, len(plan) - downloaded)
 
     async def run_forever(self) -> None:
         """Запускает проходы, пока не возникнет неустранимая ошибка."""
