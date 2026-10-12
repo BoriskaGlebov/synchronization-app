@@ -53,3 +53,11 @@ def test_spaces_around_local_folder_names_are_stripped() -> None:
     assert mapper(("/Бориска", "/Яндекс.Диск/Бориска ")).target_of("/Бориска/a.jpg") == (
         "Яндекс.Диск/Бориска/a.jpg"
     )
+
+
+def test_local_folders_and_remote_folders() -> None:
+    m = mapper(("/Фото", "Архив/Фото"), ("/Книги", "Книги"))
+
+    assert sorted(m.remote_folders()) == ["/Книги", "/Фото"]
+    assert sorted(m.local_folders()) == ["Архив/Фото", "Книги"]
+    assert mapper(("/", "")).local_folders() == [""]

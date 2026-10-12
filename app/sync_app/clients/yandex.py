@@ -1,4 +1,6 @@
+import asyncio
 import json
+from collections.abc import Sequence
 from datetime import UTC
 from pathlib import Path
 from types import TracebackType
@@ -6,7 +8,7 @@ from typing import Self
 
 from loguru import logger
 from yadisk import AsyncClient
-from yadisk.objects import TokenObject
+from yadisk.objects import AsyncResourceObject, TokenObject
 
 from sync_app.core.exceptions import AuthRequiredError
 from sync_app.core.settings import Settings
@@ -14,6 +16,7 @@ from sync_app.models import FileInfo
 
 PAGE_SIZE = 1000
 PROGRESS_STEP = 2000
+LISTING_CONCURRENCY = 8
 
 
 class TokenStore:
@@ -61,6 +64,7 @@ class YandexDisk:
         self.client = client
         self.store = store
         self.redirect_uri = redirect_uri or None
+        self._listing = asyncio.Semaphore(LISTING_CONCURRENCY)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> Self:
@@ -118,26 +122,68 @@ class YandexDisk:
         self.store.save(token)
         self.client.token = token.access_token
 
-    async def walk_files(self) -> dict[str, FileInfo]:
-        """Возвращает все файлы диска.
+    async def walk_files(self, folders: Sequence[str]) -> dict[str, FileInfo]:
+        """Возвращает файлы указанных папок диска, включая вложенные.
 
-        Использует плоский постраничный список файлов, это на порядок быстрее
-        рекурсивного обхода папок.
+        Просматриваются только эти папки. Если среди них корень `/`, быстрее прочитать
+        плоский список всех файлов диска, это делается одним потоком запросов.
+
+        Args:
+            folders: Папки диска вида `/Папка`.
 
         Returns:
             Словарь, где ключ это полный путь файла на диске вида `/папка/файл.jpg`.
         """
+        roots = self._top_level(folders)
         files: dict[str, FileInfo] = {}
-        scanned = 0
-        async for item in self.client.get_files(limit=PAGE_SIZE):
-            scanned += 1
-            if scanned % PROGRESS_STEP == 0:
-                logger.info("Просмотрено файлов на Диске: {}", scanned)
-            if item.path and item.modified:
-                path = item.path.removeprefix("disk:")
-                modified = item.modified.astimezone(UTC).replace(microsecond=0)
-                files[path] = FileInfo(path, item.size or 0, modified)
+        if "/" in roots:
+            async for item in self.client.get_files(limit=PAGE_SIZE):
+                self._add(files, item)
+                if len(files) % PROGRESS_STEP == 0:
+                    logger.info("Просмотрено файлов на Диске: {}", len(files))
+            return files
+        for root in roots:
+            logger.info("Просматриваю папку на Диске: {}", root)
+            await self._walk_folder(root, files)
         return files
+
+    @staticmethod
+    def _top_level(folders: Sequence[str]) -> list[str]:
+        """Оставляет только папки, не вложенные в другие из списка."""
+        normalized = sorted(
+            {"/" + folder.strip("/") for folder in folders}, key=lambda f: (len(f), f)
+        )
+        roots: list[str] = []
+        for folder in normalized:
+            if not any(root == "/" or folder.startswith(root + "/") for root in roots):
+                roots.append(folder)
+        return roots
+
+    async def _walk_folder(self, root: str, files: dict[str, FileInfo]) -> None:
+        pending = [root]
+        while pending:
+            folders = pending
+            pending = []
+            async with asyncio.TaskGroup() as group:
+                results = [group.create_task(self._list_folder(folder)) for folder in folders]
+            for task in results:
+                for item in task.result():
+                    if item.type == "dir" and item.path:
+                        pending.append(item.path.removeprefix("disk:"))
+                    else:
+                        self._add(files, item)
+            logger.info("Просмотрено файлов в {}: {}", root, len(files))
+
+    async def _list_folder(self, folder: str) -> list[AsyncResourceObject]:
+        async with self._listing:
+            return [item async for item in self.client.listdir(folder)]
+
+    @staticmethod
+    def _add(files: dict[str, FileInfo], item: AsyncResourceObject) -> None:
+        if item.type == "file" and item.path and item.modified:
+            path = item.path.removeprefix("disk:")
+            modified = item.modified.astimezone(UTC).replace(microsecond=0)
+            files[path] = FileInfo(path, item.size or 0, modified)
 
     async def download(self, remote_path: str, destination: Path) -> None:
         """Скачивает файл с диска.

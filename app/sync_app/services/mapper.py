@@ -14,13 +14,11 @@ class MappedFiles:
     Attributes:
         files: Описания файлов по пути назначения относительно корневой папки.
         sources: Полный путь на Яндекс Диске по пути назначения.
-        unmapped: Пути файлов Диска, не попавших ни в одно соответствие.
         collisions: Пары (пропущенный файл, занявший место файл) при совпадении путей.
     """
 
     files: dict[str, FileInfo]
     sources: dict[str, str]
-    unmapped: list[str]
     collisions: list[tuple[str, str]]
 
 
@@ -51,9 +49,14 @@ class FolderMapper:
             raise ValueError(f"Недопустимый путь в соответствии папок: {path}")
         return "/".join(parts)
 
-    def local_prefixes(self) -> set[str]:
-        """Возвращает префиксы путей назначения; пустая строка означает всю папку."""
-        return {f"{local}/" if local else "" for _, local in self._rules}
+    def local_folders(self) -> list[str]:
+        """Возвращает подпапки назначения из соответствий, пустая строка означает весь корень."""
+        folders = sorted({local for _, local in self._rules}, key=len)
+        return [""] if "" in folders else folders
+
+    def remote_folders(self) -> list[str]:
+        """Возвращает папки Диска из соответствий, которые нужно просматривать."""
+        return ["/" + remote for remote, _ in self._rules]
 
     def target_of(self, remote_path: str) -> str | None:
         """Возвращает путь назначения для файла Диска или `None`, если он не сопоставлен."""
@@ -77,12 +80,10 @@ class FolderMapper:
         """
         files: dict[str, FileInfo] = {}
         sources: dict[str, str] = {}
-        unmapped: list[str] = []
         collisions: list[tuple[str, str]] = []
         for remote_path, info in sorted(remote.items()):
             target = self.target_of(remote_path)
             if target is None:
-                unmapped.append(remote_path)
                 continue
             if target in sources:
                 collisions.append((remote_path, sources[target]))
@@ -92,4 +93,4 @@ class FolderMapper:
                 continue
             files[target] = FileInfo(target, info.size, info.modified)
             sources[target] = remote_path
-        return MappedFiles(files, sources, unmapped, collisions)
+        return MappedFiles(files, sources, collisions)

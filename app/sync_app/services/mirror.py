@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import os
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -76,11 +75,11 @@ class MirrorService:
             LocalFolderNotFoundError: Локальной папки нет (например, диск не смонтирован).
         """
         logger.info("Сканирую папку назначения: {}", self.storage.root)
-        local = await asyncio.to_thread(self.storage.list_files)
+        local = await asyncio.to_thread(self.storage.list_files, self.mapper.local_folders())
         logger.info(
             "В папке назначения файлов: {}. Получаю список файлов с Яндекс Диска", len(local)
         )
-        mapped = self.mapper.map_files(await self.disk.walk_files())
+        mapped = self.mapper.map_files(await self.disk.walk_files(self.mapper.remote_folders()))
         remote = mapped.files
         plan = plan_downloads(remote, local)
         self._sources = mapped.sources
@@ -113,12 +112,6 @@ class MirrorService:
         return MirrorResult(len(plan), planned_bytes, downloaded, len(plan) - downloaded)
 
     def _log_findings(self, mapped: MappedFiles, problems: dict[str, list[str]]) -> None:
-        folders = Counter(PurePosixPath(path).parts[1] for path in mapped.unmapped)
-        if folders:
-            top = ", ".join(f"{name} ({count})" for name, count in folders.most_common(8))
-            logger.warning(
-                "Не покрыто соответствиями: {} файлов, папки: {}", len(mapped.unmapped), top
-            )
         for skipped, kept in mapped.collisions:
             logger.warning("Конфликт путей: {} пропущен, занято {}", skipped, kept)
         for path, found in list(problems.items())[:20]:
@@ -147,14 +140,9 @@ class MirrorService:
         lines += ["", f"# Уже на месте ({len(present)})", *present]
         lines += ["", f"# Проблемные имена ({len(problems)})"]
         lines += [f"{path}: {'; '.join(found)}" for path, found in problems.items()]
-        lines += ["", f"# Не покрыто соответствиями ({len(mapped.unmapped)})", *mapped.unmapped]
         lines += ["", f"# Конфликты путей ({len(mapped.collisions)})"]
         lines += [f"{skipped} пропущен, занято {kept}" for skipped, kept in mapped.collisions]
-        extra = sorted(
-            path
-            for path in set(local) - set(remote)
-            if any(path.startswith(prefix) for prefix in self.mapper.local_prefixes())
-        )
+        extra = sorted(set(local) - set(remote))
         lines += [
             "",
             f"# Есть локально в папках соответствий, но нет на Диске (не удаляются) ({len(extra)})",

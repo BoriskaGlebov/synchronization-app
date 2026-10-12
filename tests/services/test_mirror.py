@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -18,7 +19,7 @@ class FakeDisk:
         self.files = files
         self.broken = broken or set()
 
-    async def walk_files(self) -> dict[str, FileInfo]:
+    async def walk_files(self, folders: Sequence[str]) -> dict[str, FileInfo]:
         return {path: FileInfo(path, len(data), MODIFIED) for path, data in self.files.items()}
 
     async def download(self, relative_path: str, destination: Path) -> None:
@@ -115,7 +116,7 @@ def test_mapping_puts_remote_folder_into_local_subfolder(tmp_path: Path) -> None
     assert result.planned == 1
 
 
-def test_report_lists_plan_present_problems_and_unmapped(tmp_path: Path) -> None:
+def test_report_lists_plan_present_and_problems(tmp_path: Path) -> None:
     root = tmp_path / "dest"
     root.mkdir()
     (root / "ok.jpg").write_bytes(b"1")
@@ -128,7 +129,6 @@ def test_report_lists_plan_present_problems_and_unmapped(tmp_path: Path) -> None
     text = report.read_text(encoding="utf-8")
     assert "# К скачиванию (2)" in text and "new.jpg  <-  /Фото/new.jpg" in text
     assert "# Проблемные имена (1)" in text and "bad:name.jpg" in text
-    assert "# Не покрыто соответствиями (1)" in text and "/Другое/x.pdf" in text
     assert (
         "# Есть локально в папках соответствий, но нет на Диске (не удаляются) (1)" in text
         and "ok.jpg" in text
