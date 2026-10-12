@@ -19,8 +19,9 @@
 - [x] `config.ini` убран из git, добавлен `config.example.ini`.
 - [ ] Включить `ruff` D и `mypy` для старых модулей по мере переписывания
       (список в `pyproject.toml`: `per-file-ignores` и `tool.mypy.overrides`).
-- [ ] Настройки через переменные окружения (`pydantic-settings`), токен не хранится в файлах.
-- [ ] Каркас пакета `src/sync_app/` и каталог `tests/` с pytest.
+- [x] Настройки через переменные окружения (`pydantic-settings`, `src/sync_app/settings.py`, пример в `.env.example`).
+      Старый `config.py` пока остаётся, уйдёт при переписывании клиента Яндекса.
+- [x] Каркас пакета `src/sync_app/` и каталог `tests/` с pytest.
 - [ ] CI в GitHub Actions: ruff, mypy, pytest.
 - [ ] Обновить README под Poetry.
 
