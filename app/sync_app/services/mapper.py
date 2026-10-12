@@ -42,7 +42,7 @@ class FolderMapper:
 
     @staticmethod
     def _normalize(path: str) -> str:
-        parts = PurePosixPath(path.strip("/")).parts
+        parts = tuple(part.strip() for part in PurePosixPath(path.strip("/")).parts)
         if ".." in parts:
             raise ValueError(f"Недопустимый путь в соответствии папок: {path}")
         return "/".join(parts)

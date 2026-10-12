@@ -47,3 +47,9 @@ def test_collision_keeps_first_file() -> None:
     mapped = m.map_files(remote)
 
     assert mapped.sources == {"X/f.jpg": "/A/f.jpg"}
+
+
+def test_spaces_around_local_folder_names_are_stripped() -> None:
+    assert mapper(("/Бориска", "/Яндекс.Диск/Бориска ")).target_of("/Бориска/a.jpg") == (
+        "Яндекс.Диск/Бориска/a.jpg"
+    )
