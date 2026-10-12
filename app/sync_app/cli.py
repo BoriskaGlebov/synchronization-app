@@ -64,6 +64,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         logger_level_file=settings.logging.level_file,
         logger_error_file=settings.logging.level_error,
     ).setup()
+    logger.info("Логи пишутся в {}", settings.logging.dir)
     asyncio.run(
         _run(
             settings,

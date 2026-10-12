@@ -4,6 +4,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
+from loguru import logger
 from yadisk import AsyncClient
 from yadisk.objects import TokenObject
 
@@ -12,6 +13,7 @@ from sync_app.core.settings import Settings
 from sync_app.models import FileInfo
 
 PAGE_SIZE = 1000
+PROGRESS_STEP = 2000
 
 
 class TokenStore:
@@ -126,7 +128,11 @@ class YandexDisk:
             Словарь, где ключ это полный путь файла на диске вида `/папка/файл.jpg`.
         """
         files: dict[str, FileInfo] = {}
+        scanned = 0
         async for item in self.client.get_files(limit=PAGE_SIZE):
+            scanned += 1
+            if scanned % PROGRESS_STEP == 0:
+                logger.info("Просмотрено файлов на Диске: {}", scanned)
             if item.path and item.modified:
                 path = item.path.removeprefix("disk:")
                 modified = item.modified.astimezone(UTC).replace(microsecond=0)

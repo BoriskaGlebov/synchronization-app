@@ -69,7 +69,11 @@ class MirrorService:
         Raises:
             LocalFolderNotFoundError: Локальной папки нет (например, диск не смонтирован).
         """
+        logger.info("Сканирую папку назначения: {}", self.storage.root)
         local = await asyncio.to_thread(self.storage.list_files)
+        logger.info(
+            "В папке назначения файлов: {}. Получаю список файлов с Яндекс Диска", len(local)
+        )
         mapped = self.mapper.map_files(await self.disk.walk_files())
         remote = mapped.files
         plan = plan_downloads(remote, local)
