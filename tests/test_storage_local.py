@@ -18,3 +18,11 @@ def test_lists_only_files(tmp_path: Path) -> None:
 def test_missing_folder_raises(tmp_path: Path) -> None:
     with pytest.raises(LocalFolderNotFoundError):
         LocalStorage(tmp_path / "nope").list_files()
+
+
+def test_lists_nested_files_with_relative_paths_and_skips_part(tmp_path: Path) -> None:
+    (tmp_path / "2022" / "05").mkdir(parents=True)
+    (tmp_path / "2022" / "05" / "a.jpg").write_text("x")
+    (tmp_path / "2022" / "b.jpg.part").write_text("y")
+
+    assert list(LocalStorage(tmp_path).list_files()) == ["2022/05/a.jpg"]

@@ -118,30 +118,33 @@ class YandexDisk:
         self.store.save(token)
         self.client.token = token.access_token
 
-    async def list_files(self) -> dict[str, FileInfo]:
-        """Возвращает файлы папки (без вложенных) по имени."""
-        return {
-            item.name: FileInfo(
-                item.name, item.size or 0, item.modified.astimezone(UTC).replace(microsecond=0)
-            )
-            async for item in self.client.listdir(self.remote_folder)
-            if item.type == "file" and item.name and item.modified
-        }
+    async def walk_files(self) -> dict[str, FileInfo]:
+        """Возвращает все файлы папки, включая вложенные.
 
-    async def upload(self, local_path: Path, overwrite: bool = False) -> None:
-        """Загружает файл в папку под его именем.
+        Returns:
+            Словарь, где ключ это путь относительно папки с разделителем `/`.
+        """
+        prefix = f"disk:{self.remote_folder.rstrip('/')}/"
+        files: dict[str, FileInfo] = {}
+        pending = [self.remote_folder]
+        while pending:
+            async for item in self.client.listdir(pending.pop()):
+                if item.type == "dir" and item.path:
+                    pending.append(item.path.removeprefix("disk:"))
+                elif item.type == "file" and item.path and item.modified:
+                    relative = item.path.removeprefix(prefix)
+                    modified = item.modified.astimezone(UTC).replace(microsecond=0)
+                    files[relative] = FileInfo(relative, item.size or 0, modified)
+        return files
+
+    async def download(self, relative_path: str, destination: Path) -> None:
+        """Скачивает файл папки.
 
         Args:
-            local_path: Путь к локальному файлу.
-            overwrite: Перезаписать файл, если он уже есть.
+            relative_path: Путь файла относительно папки на диске.
+            destination: Куда сохранить файл на локальном диске.
         """
-        await self.client.upload(
-            str(local_path), self._remote_path(local_path.name), overwrite=overwrite
-        )
-
-    async def remove(self, name: str) -> None:
-        """Перемещает файл папки в корзину."""
-        await self.client.remove(self._remote_path(name), permanently=False)
+        await self.client.download(self._remote_path(relative_path), str(destination))
 
     def _remote_path(self, name: str) -> str:
         return f"{self.remote_folder.rstrip('/')}/{name}"

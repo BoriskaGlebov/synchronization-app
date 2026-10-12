@@ -7,7 +7,7 @@ from loguru import logger
 from sync_app.clients.yandex import YandexDisk
 from sync_app.core.logger_config import LoggerConfig
 from sync_app.core.settings import Settings
-from sync_app.services.sync import SyncService
+from sync_app.services.mirror import MirrorService
 from sync_app.storage.local import LocalStorage
 
 
@@ -20,24 +20,27 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("auth", help=auth_help, description=auth_help)
     run = subparsers.add_parser("run", help=run_help, description=run_help)
     run.add_argument("--once", action="store_true", help="выполнить один цикл и выйти")
+    run.add_argument(
+        "--dry-run", action="store_true", help="показать, что будет скачано, ничего не записывая"
+    )
     return parser
 
 
-async def _run(settings: Settings, command: str, once: bool) -> None:
+async def _run(settings: Settings, command: str, once: bool, dry_run: bool) -> None:
     async with YandexDisk.from_settings(settings) as disk:
         if command == "auth":
             await disk.authorize()
             logger.info("Токен сохранён: {}", disk.store.path)
             return
         await disk.ensure_token()
-        service = SyncService(
+        service = MirrorService(
             disk=disk,
             storage=LocalStorage(settings.sync.local_folder),
             interval_seconds=settings.sync.interval_seconds,
             concurrency=settings.sync.concurrency,
         )
-        if once:
-            await service.run_once()
+        if once or dry_run:
+            await service.run_once(dry_run=dry_run)
         else:
             await service.run_forever()
 
@@ -57,7 +60,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         logger_level_file=settings.logging.level_file,
         logger_error_file=settings.logging.level_error,
     ).setup()
-    asyncio.run(_run(settings, args.command or "run", getattr(args, "once", False)))
+    asyncio.run(
+        _run(
+            settings,
+            args.command or "run",
+            getattr(args, "once", False),
+            getattr(args, "dry_run", False),
+        )
+    )
 
 
 if __name__ == "__main__":

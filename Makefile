@@ -1,4 +1,4 @@
-.PHONY: install auth run once test check
+.PHONY: install auth run once dry test check
 
 install:
 	poetry install
@@ -18,3 +18,6 @@ test:
 
 check:
 	poetry run pre-commit run --all-files
+
+dry:
+	poetry run sync-app run --dry-run

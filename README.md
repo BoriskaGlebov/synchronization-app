@@ -12,7 +12,8 @@ app/sync_app/
   core/                   настройки, логирование, исключения
   clients/yandex.py       клиент API Яндекс Диска
   storage/local.py        локальная папка или сетевой диск
-  services/sync.py        логика синхронизации
+  services/planner.py     что скачать (чистая логика)
+  services/mirror.py      зеркалирование Яндекс Диск -> локальная папка
 tests/                    pytest
 docs/img/                 иллюстрации
 ```
@@ -30,7 +31,7 @@ cp .env.example .env   # вписать SYNC_YANDEX_TOKEN
 
 ## Запуск
 
-Коротко через make: `make install`, `make auth`, `make run`, `make once`, `make test`, `make check`.
+Коротко через make: `make install`, `make auth`, `make run`, `make once`, `make dry`, `make test`, `make check`.
 
 ```
 poetry run sync-app          # демон
