@@ -1,6 +1,8 @@
 import json
 from datetime import UTC
 from pathlib import Path
+from types import TracebackType
+from typing import Self
 
 from yadisk import AsyncClient
 from yadisk.objects import TokenObject
@@ -35,57 +37,111 @@ class TokenStore:
         self.path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def build_client(settings: Settings) -> AsyncClient:
-    """Создаёт асинхронный клиент Яндекс Диска на httpx."""
-    return AsyncClient(
-        id=settings.yandex_client_id,
-        secret=settings.yandex_client_secret.get_secret_value(),
-        session="httpx",
-    )
+class YandexDisk:
+    """Работа с одной папкой Яндекс Диска: вход, токен и файловые операции.
 
-
-async def authorize(client: AsyncClient, store: TokenStore, redirect_uri: str | None) -> None:
-    """Получает токены по коду подтверждения и сохраняет их.
+    Скрывает библиотеку `yadisk`: остальной код видит только этот класс и `FileInfo`.
 
     Args:
-        client: Клиент с заданными id и secret.
+        client: Асинхронный клиент `yadisk` с заданными id и secret.
         store: Хранилище токенов.
-        redirect_uri: Redirect URI приложения.
+        remote_folder: Папка на диске, с которой работает объект.
+        redirect_uri: Redirect URI приложения для получения кода.
     """
-    print("Откройте ссылку, разрешите доступ и вставьте код подтверждения:")
-    print(client.get_code_url(redirect_uri=redirect_uri or None))
-    code = input("Код: ").strip()
-    store.save(await client.get_token(code))
 
+    def __init__(
+        self,
+        client: AsyncClient,
+        store: TokenStore,
+        remote_folder: str,
+        redirect_uri: str | None = None,
+    ) -> None:
+        self.client = client
+        self.store = store
+        self.remote_folder = "/" + remote_folder.strip("/")
+        self.redirect_uri = redirect_uri or None
 
-async def ensure_token(client: AsyncClient, store: TokenStore) -> None:
-    """Подставляет в клиент действующий токен, при необходимости обновляя его.
-
-    Raises:
-        AuthRequiredError: Токенов нет или обновить их не удалось.
-    """
-    tokens = store.load()
-    if tokens is None:
-        raise AuthRequiredError("Токен не найден, выполните `sync-app auth`")
-    client.token = tokens["access_token"]
-    if await client.check_token():
-        return
-    refresh = tokens.get("refresh_token")
-    if not refresh:
-        raise AuthRequiredError("Токен истёк, выполните `sync-app auth`")
-    token = await client.refresh_token(refresh)
-    if not token.access_token:
-        raise AuthRequiredError("Не удалось обновить токен, выполните `sync-app auth`")
-    store.save(token)
-    client.token = token.access_token
-
-
-async def list_files(client: AsyncClient, folder: str) -> dict[str, FileInfo]:
-    """Возвращает файлы папки Яндекс Диска (без вложенных) по имени."""
-    return {
-        item.name: FileInfo(
-            item.name, item.size or 0, item.modified.astimezone(UTC).replace(microsecond=0)
+    @classmethod
+    def from_settings(cls, settings: Settings) -> Self:
+        """Создаёт объект из настроек приложения."""
+        client = AsyncClient(
+            id=settings.yandex_client_id,
+            secret=settings.yandex_client_secret.get_secret_value(),
+            session="httpx",
         )
-        async for item in client.listdir(folder)
-        if item.type == "file" and item.name and item.modified
-    }
+        return cls(
+            client,
+            TokenStore(settings.auth.token_file),
+            settings.sync.remote_folder,
+            settings.auth.redirect_uri,
+        )
+
+    async def __aenter__(self) -> Self:
+        """Открывает HTTP-сессию клиента."""
+        await self.client.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Закрывает HTTP-сессию клиента."""
+        await self.client.__aexit__(exc_type, exc, traceback)
+
+    async def authorize(self) -> None:
+        """Получает токены по коду подтверждения и сохраняет их."""
+        print("Откройте ссылку, разрешите доступ и вставьте код подтверждения:")
+        print(self.client.get_code_url(redirect_uri=self.redirect_uri))
+        code = input("Код: ").strip()
+        self.store.save(await self.client.get_token(code))
+
+    async def ensure_token(self) -> None:
+        """Подставляет в клиент действующий токен, при необходимости обновляя его.
+
+        Raises:
+            AuthRequiredError: Токенов нет или обновить их не удалось.
+        """
+        tokens = self.store.load()
+        if tokens is None:
+            raise AuthRequiredError("Токен не найден, выполните `sync-app auth`")
+        self.client.token = tokens["access_token"]
+        if await self.client.check_token():
+            return
+        refresh = tokens.get("refresh_token")
+        if not refresh:
+            raise AuthRequiredError("Токен истёк, выполните `sync-app auth`")
+        token = await self.client.refresh_token(refresh)
+        if not token.access_token:
+            raise AuthRequiredError("Не удалось обновить токен, выполните `sync-app auth`")
+        self.store.save(token)
+        self.client.token = token.access_token
+
+    async def list_files(self) -> dict[str, FileInfo]:
+        """Возвращает файлы папки (без вложенных) по имени."""
+        return {
+            item.name: FileInfo(
+                item.name, item.size or 0, item.modified.astimezone(UTC).replace(microsecond=0)
+            )
+            async for item in self.client.listdir(self.remote_folder)
+            if item.type == "file" and item.name and item.modified
+        }
+
+    async def upload(self, local_path: Path, overwrite: bool = False) -> None:
+        """Загружает файл в папку под его именем.
+
+        Args:
+            local_path: Путь к локальному файлу.
+            overwrite: Перезаписать файл, если он уже есть.
+        """
+        await self.client.upload(
+            str(local_path), self._remote_path(local_path.name), overwrite=overwrite
+        )
+
+    async def remove(self, name: str) -> None:
+        """Перемещает файл папки в корзину."""
+        await self.client.remove(self._remote_path(name), permanently=False)
+
+    def _remote_path(self, name: str) -> str:
+        return f"{self.remote_folder.rstrip('/')}/{name}"

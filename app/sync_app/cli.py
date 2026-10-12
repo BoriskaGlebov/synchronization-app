@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 from loguru import logger
 
-from sync_app.clients.yandex import TokenStore, authorize, build_client, ensure_token
+from sync_app.clients.yandex import YandexDisk
 from sync_app.core.logger_config import LoggerConfig
 from sync_app.core.settings import Settings
 from sync_app.services.sync import SyncService
@@ -14,26 +14,25 @@ from sync_app.storage.local import LocalStorage
 def build_parser() -> argparse.ArgumentParser:
     """Создаёт разбор аргументов командной строки."""
     parser = argparse.ArgumentParser(prog="sync-app", description="Синхронизация с Яндекс Диском")
-    subparsers = parser.add_subparsers(dest="command")
-    subparsers.add_parser("auth", help="получить OAuth-токен по коду подтверждения")
-    run = subparsers.add_parser("run", help="синхронизировать (команда по умолчанию)")
+    subparsers = parser.add_subparsers(dest="command", description="Команды")
+    auth_help = "получить OAuth-токен по коду подтверждения"
+    run_help = "синхронизировать (команда по умолчанию)"
+    subparsers.add_parser("auth", help=auth_help, description=auth_help)
+    run = subparsers.add_parser("run", help=run_help, description=run_help)
     run.add_argument("--once", action="store_true", help="выполнить один цикл и выйти")
     return parser
 
 
 async def _run(settings: Settings, command: str, once: bool) -> None:
-    client = build_client(settings)
-    store = TokenStore(settings.auth.token_file)
-    async with client:
+    async with YandexDisk.from_settings(settings) as disk:
         if command == "auth":
-            await authorize(client, store, settings.auth.redirect_uri)
-            logger.info("Токен сохранён: {}", store.path)
+            await disk.authorize()
+            logger.info("Токен сохранён: {}", disk.store.path)
             return
-        await ensure_token(client, store)
+        await disk.ensure_token()
         service = SyncService(
-            client=client,
+            disk=disk,
             storage=LocalStorage(settings.sync.local_folder),
-            remote_folder=settings.sync.remote_folder,
             interval_seconds=settings.sync.interval_seconds,
             concurrency=settings.sync.concurrency,
         )
