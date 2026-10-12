@@ -30,6 +30,8 @@ cp .env.example .env   # вписать SYNC_YANDEX_TOKEN
 
 ## Запуск
 
+Коротко через make: `make install`, `make auth`, `make run`, `make once`, `make test`, `make check`.
+
 ```
 poetry run sync-app          # демон
 poetry run sync-app --once   # один цикл
