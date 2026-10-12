@@ -38,5 +38,12 @@ class LocalStorage:
         return files
 
     def path_of(self, relative_path: str) -> Path:
-        """Возвращает полный путь к файлу по относительному."""
+        """Возвращает полный путь к файлу по относительному.
+
+        Raises:
+            ValueError: Путь выходит за пределы корневой папки.
+        """
+        path = (self.root / relative_path).resolve()
+        if not path.is_relative_to(self.root.resolve()):
+            raise ValueError(f"Путь выходит за пределы папки назначения: {relative_path}")
         return self.root / relative_path

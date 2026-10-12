@@ -3,10 +3,15 @@ redirect_uri = ""
 token_file = "secrets/token.json"
 
 [sync]
-remote_folder = "/Фото"
 local_folder = "/mnt/nas/photos"
 interval_seconds = 60
 concurrency = 5
+
+# Какие папки Яндекс Диска в какие подпапки local_folder копировать.
+# remote = "/" означает весь диск, local = "" означает сам local_folder.
+[[sync.mappings]]
+remote = "/Фотокамера"
+local = "Фотокамера"
 
 [logging]
 dir = "logs"

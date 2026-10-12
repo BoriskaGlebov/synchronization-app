@@ -3,7 +3,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sync_app.core.settings import FolderMapping
 from sync_app.models import FileInfo
+from sync_app.services.mapper import FolderMapper
 from sync_app.services.mirror import MirrorService
 from sync_app.storage.local import LocalStorage
 from yadisk.exceptions import YaDiskError
@@ -12,8 +14,6 @@ MODIFIED = datetime(2025, 5, 1, 12, 0, tzinfo=UTC)
 
 
 class FakeDisk:
-    remote_folder = "/Фото"
-
     def __init__(self, files: dict[str, bytes], broken: set[str] | None = None) -> None:
         self.files = files
         self.broken = broken or set()
@@ -27,12 +27,15 @@ class FakeDisk:
         destination.write_bytes(self.files[relative_path])
 
 
-def make_service(disk: FakeDisk, root: Path) -> MirrorService:
-    return MirrorService(disk, LocalStorage(root), 1, 2)  # type: ignore[arg-type]
+def make_service(
+    disk: FakeDisk, root: Path, mappings: list[FolderMapping] | None = None
+) -> MirrorService:
+    mapper = FolderMapper(mappings or [FolderMapping(remote="/")])
+    return MirrorService(disk, LocalStorage(root), mapper, 1, 2)  # type: ignore[arg-type]
 
 
 def test_downloads_into_nested_folders_and_keeps_mtime(tmp_path: Path) -> None:
-    disk = FakeDisk({"2022/05/a.jpg": b"abc"})
+    disk = FakeDisk({"/2022/05/a.jpg": b"abc"})
 
     result = asyncio.run(make_service(disk, tmp_path).run_once())
 
@@ -44,7 +47,7 @@ def test_downloads_into_nested_folders_and_keeps_mtime(tmp_path: Path) -> None:
 
 
 def test_dry_run_writes_nothing(tmp_path: Path) -> None:
-    disk = FakeDisk({"a.jpg": b"abc"})
+    disk = FakeDisk({"/a.jpg": b"abc"})
 
     result = asyncio.run(make_service(disk, tmp_path).run_once(dry_run=True))
 
@@ -53,14 +56,14 @@ def test_dry_run_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_second_run_downloads_nothing(tmp_path: Path) -> None:
-    service = make_service(FakeDisk({"a.jpg": b"abc"}), tmp_path)
+    service = make_service(FakeDisk({"/a.jpg": b"abc"}), tmp_path)
     asyncio.run(service.run_once())
 
     assert asyncio.run(service.run_once()).planned == 0
 
 
 def test_failed_file_does_not_stop_others_and_leaves_no_part(tmp_path: Path) -> None:
-    disk = FakeDisk({"ok.jpg": b"1", "bad.jpg": b"2"}, broken={"bad.jpg"})
+    disk = FakeDisk({"/ok.jpg": b"1", "/bad.jpg": b"2"}, broken={"/bad.jpg"})
 
     result = asyncio.run(make_service(disk, tmp_path).run_once())
 
@@ -79,7 +82,7 @@ def test_keeps_extra_local_files(tmp_path: Path) -> None:
 def test_missing_local_folder_stops_before_anything(tmp_path: Path) -> None:
     from sync_app.core.exceptions import LocalFolderNotFoundError
 
-    service = make_service(FakeDisk({"a": b"1"}), tmp_path / "not-mounted")
+    service = make_service(FakeDisk({"/a": b"1"}), tmp_path / "not-mounted")
 
     with pytest.raises(LocalFolderNotFoundError):
         asyncio.run(service.run_once())
@@ -93,6 +96,17 @@ def test_unsupported_utime_does_not_fail_download(
 
     monkeypatch.setattr("sync_app.services.mirror.os.utime", deny)
 
-    result = asyncio.run(make_service(FakeDisk({"a.jpg": b"abc"}), tmp_path).run_once())
+    result = asyncio.run(make_service(FakeDisk({"/a.jpg": b"abc"}), tmp_path).run_once())
 
     assert result.downloaded == 1 and (tmp_path / "a.jpg").read_bytes() == b"abc"
+
+
+def test_mapping_puts_remote_folder_into_local_subfolder(tmp_path: Path) -> None:
+    disk = FakeDisk({"/Фотокамера/2022/a.jpg": b"1", "/Документы/b.pdf": b"2"})
+    mappings = [FolderMapping(remote="/Фотокамера", local="Фото/Камера")]
+
+    result = asyncio.run(make_service(disk, tmp_path, mappings).run_once())
+
+    assert (tmp_path / "Фото/Камера/2022/a.jpg").read_bytes() == b"1"
+    assert not (tmp_path / "Документы").exists()
+    assert result.planned == 1

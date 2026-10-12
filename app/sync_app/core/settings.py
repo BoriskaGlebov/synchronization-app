@@ -15,17 +15,30 @@ CONFIG_PATH_ENV = "SYNC_CONFIG"
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config" / "settings.toml"
 
 
+class FolderMapping(BaseModel):
+    """Соответствие папки на Яндекс Диске папке назначения.
+
+    Attributes:
+        remote: Папка на Яндекс Диске, `/` означает весь диск.
+        local: Подпапка внутри `local_folder`, пустая строка означает сам `local_folder`.
+    """
+
+    remote: str
+    local: str = ""
+
+
 class SyncSettings(BaseModel):
     """Параметры синхронизации.
 
     Attributes:
-        remote_folder: Папка на Яндекс Диске.
-        local_folder: Папка назначения (локальная или сетевой диск).
+        local_folder: Корневая папка назначения (локальная или сетевой диск).
+        mappings: Какие папки Диска в какие подпапки назначения копировать.
         interval_seconds: Пауза между циклами синхронизации.
+        concurrency: Максимум одновременных скачиваний.
     """
 
-    remote_folder: str = "/"
     local_folder: Path
+    mappings: list[FolderMapping] = Field(default_factory=lambda: [FolderMapping(remote="/")])
     interval_seconds: int = Field(default=60, gt=0)
     concurrency: int = Field(default=5, gt=0)
 

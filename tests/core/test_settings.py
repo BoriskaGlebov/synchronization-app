@@ -17,7 +17,7 @@ def test_reads_toml_and_secrets_from_env() -> None:
 
     assert settings.yandex_client_id == "client-id"
     assert settings.yandex_client_secret.get_secret_value() == "top-secret"
-    assert settings.sync.remote_folder == "/Фото"
+    assert [(m.remote, m.local) for m in settings.sync.mappings] == [("/Фото", "Фото")]
     assert settings.sync.local_folder == Path("/mnt/nas")
     assert settings.sync.interval_seconds == 15
     assert settings.sync.concurrency == 5

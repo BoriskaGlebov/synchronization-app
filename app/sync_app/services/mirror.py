@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from loguru import logger
-from yadisk.exceptions import PathNotFoundError, RequestError, UnauthorizedError, YaDiskError
+from yadisk.exceptions import RequestError, UnauthorizedError, YaDiskError
 
 from sync_app.clients.yandex import YandexDisk
 from sync_app.core.exceptions import SyncError
 from sync_app.core.formatting import human_size
+from sync_app.services.mapper import FolderMapper
 from sync_app.services.planner import Download, plan_downloads
 from sync_app.storage.local import PART_SUFFIX, LocalStorage
 
@@ -37,19 +38,27 @@ class MirrorService:
     Файлы только добавляются и обновляются, локальные файлы никогда не удаляются.
 
     Args:
-        disk: Папка на Яндекс Диске.
+        disk: Яндекс Диск.
         storage: Локальное хранилище.
+        mapper: Соответствие папок Диска и папок назначения.
         interval_seconds: Пауза между проходами в режиме демона.
         concurrency: Максимум одновременных скачиваний.
     """
 
     def __init__(
-        self, disk: YandexDisk, storage: LocalStorage, interval_seconds: int, concurrency: int
+        self,
+        disk: YandexDisk,
+        storage: LocalStorage,
+        mapper: FolderMapper,
+        interval_seconds: int,
+        concurrency: int,
     ) -> None:
         self.disk = disk
         self.storage = storage
+        self.mapper = mapper
         self.interval_seconds = interval_seconds
         self._semaphore = asyncio.Semaphore(concurrency)
+        self._sources: dict[str, str] = {}
 
     async def run_once(self, dry_run: bool = False) -> MirrorResult:
         """Выполняет один проход.
@@ -61,11 +70,13 @@ class MirrorService:
             LocalFolderNotFoundError: Локальной папки нет (например, диск не смонтирован).
         """
         local = await asyncio.to_thread(self.storage.list_files)
-        remote = await self.disk.walk_files()
+        mapped = self.mapper.map_files(await self.disk.walk_files())
+        remote = mapped.files
         plan = plan_downloads(remote, local)
+        self._sources = mapped.sources
         planned_bytes = sum(item.remote.size for item in plan)
         logger.info(
-            "На Яндекс Диске: {} файлов в {} папках, {}",
+            "По соответствиям папок на Диске: {} файлов в {} папках, {}",
             len(remote),
             len({PurePosixPath(path).parent for path in remote}),
             human_size(sum(info.size for info in remote.values())),
@@ -97,9 +108,6 @@ class MirrorService:
             except UnauthorizedError:
                 logger.error("Токен отклонён, выполните `sync-app auth`")
                 return
-            except PathNotFoundError:
-                logger.error("Папка не найдена на Яндекс Диске: {}", self.disk.remote_folder)
-                return
             except SyncError as error:
                 logger.error("{}", error)
                 return
@@ -111,7 +119,7 @@ class MirrorService:
         async with self._semaphore:
             try:
                 await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
-                await self.disk.download(item.path, part)
+                await self.disk.download(self._sources[item.path], part)
                 await asyncio.to_thread(self._finalize, item, part, target)
             except UnauthorizedError:
                 raise

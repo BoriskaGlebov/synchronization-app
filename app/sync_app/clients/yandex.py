@@ -40,14 +40,13 @@ class TokenStore:
 
 
 class YandexDisk:
-    """Работа с одной папкой Яндекс Диска: вход, токен и файловые операции.
+    """Работа с Яндекс Диском: вход, токен и файловые операции.
 
     Скрывает библиотеку `yadisk`: остальной код видит только этот класс и `FileInfo`.
 
     Args:
         client: Асинхронный клиент `yadisk` с заданными id и secret.
         store: Хранилище токенов.
-        remote_folder: Папка на диске, с которой работает объект.
         redirect_uri: Redirect URI приложения для получения кода.
     """
 
@@ -55,12 +54,10 @@ class YandexDisk:
         self,
         client: AsyncClient,
         store: TokenStore,
-        remote_folder: str,
         redirect_uri: str | None = None,
     ) -> None:
         self.client = client
         self.store = store
-        self.remote_folder = "/" + remote_folder.strip("/")
         self.redirect_uri = redirect_uri or None
 
     @classmethod
@@ -74,7 +71,6 @@ class YandexDisk:
         return cls(
             client,
             TokenStore(settings.auth.token_file),
-            settings.sync.remote_folder,
             settings.auth.redirect_uri,
         )
 
@@ -121,31 +117,27 @@ class YandexDisk:
         self.client.token = token.access_token
 
     async def walk_files(self) -> dict[str, FileInfo]:
-        """Возвращает все файлы папки, включая вложенные.
+        """Возвращает все файлы диска.
 
-        Использует плоский постраничный список всех файлов диска, это на порядок быстрее
+        Использует плоский постраничный список файлов, это на порядок быстрее
         рекурсивного обхода папок.
 
         Returns:
-            Словарь, где ключ это путь относительно папки с разделителем `/`.
+            Словарь, где ключ это полный путь файла на диске вида `/папка/файл.jpg`.
         """
-        prefix = f"disk:{self.remote_folder.rstrip('/')}/"
         files: dict[str, FileInfo] = {}
         async for item in self.client.get_files(limit=PAGE_SIZE):
-            if item.path and item.path.startswith(prefix) and item.modified:
-                relative = item.path.removeprefix(prefix)
+            if item.path and item.modified:
+                path = item.path.removeprefix("disk:")
                 modified = item.modified.astimezone(UTC).replace(microsecond=0)
-                files[relative] = FileInfo(relative, item.size or 0, modified)
+                files[path] = FileInfo(path, item.size or 0, modified)
         return files
 
-    async def download(self, relative_path: str, destination: Path) -> None:
-        """Скачивает файл папки.
+    async def download(self, remote_path: str, destination: Path) -> None:
+        """Скачивает файл с диска.
 
         Args:
-            relative_path: Путь файла относительно папки на диске.
+            remote_path: Полный путь файла на диске.
             destination: Куда сохранить файл на локальном диске.
         """
-        await self.client.download(self._remote_path(relative_path), str(destination))
-
-    def _remote_path(self, name: str) -> str:
-        return f"{self.remote_folder.rstrip('/')}/{name}"
+        await self.client.download(remote_path, str(destination))

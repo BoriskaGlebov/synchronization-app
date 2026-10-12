@@ -7,6 +7,7 @@ from loguru import logger
 from sync_app.clients.yandex import YandexDisk
 from sync_app.core.logger_config import LoggerConfig
 from sync_app.core.settings import Settings
+from sync_app.services.mapper import FolderMapper
 from sync_app.services.mirror import MirrorService
 from sync_app.storage.local import LocalStorage
 
@@ -38,6 +39,7 @@ async def _run(settings: Settings, command: str, once: bool, dry_run: bool) -> N
         service = MirrorService(
             disk=disk,
             storage=LocalStorage(settings.sync.local_folder),
+            mapper=FolderMapper(settings.sync.mappings),
             interval_seconds=settings.sync.interval_seconds,
             concurrency=settings.sync.concurrency,
         )
