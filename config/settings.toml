@@ -1,0 +1,10 @@
+[sync]
+remote_folder = "/Фото"
+local_folder = "/mnt/nas/photos"
+interval_seconds = 60
+
+[logging]
+dir = "logs"
+level_stdout = "INFO"
+level_file = "INFO"
+level_error = "WARNING"

@@ -169,5 +169,6 @@ cython_debug/
 /.idea/vcs.xml
 /config_template.ini
 
-# local config with secrets
-/config.ini
+# logs and local secrets
+logs/
+.env

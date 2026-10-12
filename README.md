@@ -1,21 +1,45 @@
-# Synchronization-app - приложение для синхронизации файлов в папке
+# synchronization-app
 
+Зеркалирование папки Яндекс Диска на локальный или сетевой диск.
 
-### 1. Для работы необходимо установить необходимые зависимости командой
-        poetry install   # venv создаётся в .venv
-        poetry run pre-commit install
-![img.png](img.png)
-### 2. В файле config.ini (скопируйте из config.example.ini, файл не коммитится) необходимо произвести первоначальную настройку параметров
-### (путь к папке синхронизации на локальной машине и на удаленном диске,
-### токен, частота синхронизации, путь к файлу с логами)
-### При указании путей необходима запись формата "some_folder/some/folder2/"
-![img_1.png](img_1.png)
+## Структура
 
-### 3. При синхронизации пишется лог файл
-![img_2.png](img_2.png)
-### 4. Для запуска использовать команду
-        poetry run python main.py
+```
+config/settings.toml      несекретные настройки
+.env                      секреты (SYNC_YANDEX_TOKEN), не коммитится
+src/sync_app/
+  cli.py                  точка входа
+  core/                   настройки, логирование, исключения
+  clients/yandex.py       клиент API Яндекс Диска
+  storage/local.py        локальная папка или сетевой диск
+  services/sync.py        логика синхронизации
+tests/                    pytest
+docs/img/                 иллюстрации
+```
 
-В ходе своей работы скрипт отслеживает изменения файлов в
-локальной папке, производит своевременную синхронизацию,
-удаление и добавление новых файлов.
+## Установка
+
+```
+poetry install
+poetry run pre-commit install
+cp .env.example .env   # вписать SYNC_YANDEX_TOKEN
+```
+
+Пути и интервал задаются в `config/settings.toml`. Любой параметр можно переопределить
+переменной окружения: `SYNC_SYNC__INTERVAL_SECONDS=30`. Другой файл настроек: `SYNC_CONFIG=/path/settings.toml`.
+
+## Запуск
+
+```
+poetry run sync-app          # демон
+poetry run sync-app --once   # один цикл
+```
+
+Логи пишутся в каталог `logging.dir`: `file.log` (без ошибок) и `error.log` (WARNING и выше).
+
+## Разработка
+
+```
+poetry run pytest
+poetry run pre-commit run --all-files
+```
