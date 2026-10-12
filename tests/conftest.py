@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from sync_app.core.settings import Settings
 
 
 @pytest.fixture
@@ -14,3 +15,8 @@ def config_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("SYNC_CONFIG", str(path))
     monkeypatch.chdir(tmp_path)
     return path
+
+
+@pytest.fixture(autouse=True)
+def ignore_project_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(Settings.model_config, "env_file", None)

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-from sync_app.core.settings import Settings
+from sync_app.core.settings import PROJECT_ROOT, Settings
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def test_reads_toml_and_secrets_from_env() -> None:
     assert settings.sync.interval_seconds == 15
     assert settings.sync.concurrency == 5
     assert settings.logging.level_stdout == "DEBUG"
-    assert settings.auth.token_file == Path("secrets/token.json")
+    assert settings.auth.token_file == PROJECT_ROOT / "secrets/token.json"
 
 
 @pytest.mark.usefixtures("config_file", "secrets")
@@ -44,3 +44,12 @@ def test_requires_client_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+@pytest.mark.usefixtures("config_file", "secrets")
+def test_default_paths_do_not_depend_on_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    assert Settings().logging.dir == PROJECT_ROOT / "logs"
