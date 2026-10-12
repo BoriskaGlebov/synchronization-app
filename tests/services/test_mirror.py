@@ -15,16 +15,25 @@ MODIFIED = datetime(2025, 5, 1, 12, 0, tzinfo=UTC)
 
 
 class FakeDisk:
-    def __init__(self, files: dict[str, bytes], broken: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        files: dict[str, bytes],
+        broken: set[str] | None = None,
+        flaky: dict[str, int] | None = None,
+    ) -> None:
         self.files = files
         self.broken = broken or set()
+        self.flaky = flaky or {}
 
     async def walk_files(self, folders: Sequence[str]) -> dict[str, FileInfo]:
         return {path: FileInfo(path, len(data), MODIFIED) for path, data in self.files.items()}
 
     async def download(self, relative_path: str, destination: Path) -> None:
         if relative_path in self.broken:
-            raise YaDiskError("boom")
+            raise YaDiskError("")
+        if self.flaky.get(relative_path, 0) > 0:
+            self.flaky[relative_path] -= 1
+            raise YaDiskError("временный сбой")
         destination.write_bytes(self.files[relative_path])
 
 
@@ -35,7 +44,7 @@ def make_service(
     report_path: Path | None = None,
 ) -> MirrorService:
     mapper = FolderMapper(mappings or [FolderMapping(remote="/")])
-    return MirrorService(disk, LocalStorage(root), mapper, 1, 2, report_path)  # type: ignore[arg-type]
+    return MirrorService(disk, LocalStorage(root), mapper, 1, 2, report_path, 3, 0)  # type: ignore[arg-type]
 
 
 def test_downloads_into_nested_folders_and_keeps_mtime(tmp_path: Path) -> None:
@@ -134,3 +143,26 @@ def test_report_lists_plan_present_and_problems(tmp_path: Path) -> None:
         and "ok.jpg" in text
     )
     assert not list(root.rglob("new.jpg"))
+
+
+def test_flaky_file_is_retried_until_it_succeeds(tmp_path: Path) -> None:
+    disk = FakeDisk({"/a.jpg": b"abc"}, flaky={"/a.jpg": 2})
+
+    result = asyncio.run(make_service(disk, tmp_path).run_once())
+
+    assert (result.downloaded, result.failed) == (1, 0)
+    assert (tmp_path / "a.jpg").read_bytes() == b"abc"
+
+
+def test_failed_file_is_listed_with_reason(tmp_path: Path) -> None:
+    root = tmp_path / "dest"
+    root.mkdir()
+    disk = FakeDisk({"/bad.jpg": b"1"}, broken={"/bad.jpg"})
+    report = tmp_path / "logs" / "report.txt"
+
+    result = asyncio.run(make_service(disk, root, report_path=report).run_once())
+
+    assert result.failures == {"bad.jpg": "YaDiskError"}
+    assert "bad.jpg  <-  /bad.jpg: YaDiskError" in (report.parent / "failed.txt").read_text(
+        encoding="utf-8"
+    )

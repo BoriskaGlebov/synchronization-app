@@ -1,5 +1,5 @@
 import pytest
-from sync_app.core.formatting import human_size
+from sync_app.core.formatting import describe_error, human_size
 
 
 @pytest.mark.parametrize(
@@ -14,3 +14,11 @@ from sync_app.core.formatting import human_size
 )
 def test_human_size(size: int, expected: str) -> None:
     assert human_size(size) == expected
+
+
+def test_describe_error_uses_type_when_message_is_empty() -> None:
+    error = RuntimeError("")
+    error.__cause__ = TimeoutError()
+
+    assert describe_error(error) == "RuntimeError (TimeoutError)"
+    assert describe_error(ValueError("плохо\nдетали")) == "ValueError: плохо"

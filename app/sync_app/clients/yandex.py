@@ -17,6 +17,7 @@ from sync_app.models import FileInfo
 PAGE_SIZE = 1000
 PROGRESS_STEP = 2000
 LISTING_CONCURRENCY = 8
+DOWNLOAD_TIMEOUT = 30
 
 
 class TokenStore:
@@ -192,4 +193,4 @@ class YandexDisk:
             remote_path: Полный путь файла на диске.
             destination: Куда сохранить файл на локальном диске.
         """
-        await self.client.download(remote_path, str(destination))
+        await self.client.download(remote_path, str(destination), timeout=DOWNLOAD_TIMEOUT)
